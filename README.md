@@ -1,58 +1,185 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Biblioteca API — Prueba técnica Laravel
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+API REST para gestionar una biblioteca de libros y sus categorías, construida con **Laravel 13** y **PHP 8.5**.
 
-## About Laravel
+Permite listar, crear, editar y eliminar libros, filtrarlos por categoría y administrar categorías, con validación mediante Form Requests y respuestas/errores HTTP en JSON.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## Requisitos
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+- PHP >= 8.3 con extensiones `pdo_mysql`, `mbstring`, `xml`, `intl`
+- Composer 2
+- MySQL 8+ (o MariaDB). Los tests usan SQLite en memoria, sin configuración extra.
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
-
-## Learning Laravel
-
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
-
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+## Instalación
 
 ```bash
-composer require laravel/boost --dev
+git clone https://github.com/oeRusso/prueba-tecnica-biblioteca.git
+cd prueba-tecnica-biblioteca
 
-php artisan boost:install
+composer install
+cp .env.example .env
+php artisan key:generate
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+Crear la base de datos y configurar las credenciales en `.env`:
 
-## Contributing
+```sql
+CREATE DATABASE biblioteca CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'biblioteca'@'localhost' IDENTIFIED BY 'biblioteca_pass';
+GRANT ALL PRIVILEGES ON biblioteca.* TO 'biblioteca'@'localhost';
+```
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+```dotenv
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=biblioteca
+DB_USERNAME=biblioteca
+DB_PASSWORD=biblioteca_pass
+```
 
-## Code of Conduct
+Ejecutar migraciones con datos de ejemplo y levantar el servidor:
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+```bash
+php artisan migrate --seed
+php artisan serve
+```
 
-## Security Vulnerabilities
+La API queda disponible en `http://127.0.0.1:8000`.
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+## Tests
 
-## License
+```bash
+php artisan test
+```
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+Feature tests que cubren el CRUD, el filtro, todas las validaciones y las reglas de negocio (`tests/Feature`).
+
+## Modelo de datos
+
+| Tabla        | Campo            | Tipo                      | Reglas                            |
+|--------------|------------------|---------------------------|-----------------------------------|
+| `categories` | `id`             | BigInt autoincremental PK |                                   |
+|              | `name`           | String                    | Requerido, **único**              |
+| `books`      | `id`             | BigInt autoincremental PK |                                   |
+|              | `title`          | String                    | Requerido, mínimo 3 caracteres    |
+|              | `author`         | String                    | Requerido                         |
+|              | `description`    | Text                      | Opcional                          |
+|              | `published_year` | SmallInt unsigned         | Requerido, año válido (1000–actual) |
+|              | `category_id`    | BigInt FK → `categories`  | Requerido, debe existir           |
+
+Relaciones Eloquent: `Category hasMany Book` y `Book belongsTo Category`. La FK usa `restrictOnDelete`, así que la base de datos también impide borrar una categoría con libros.
+
+## Endpoints
+
+Todas las respuestas son JSON. Se recomienda enviar `Accept: application/json` y `Content-Type: application/json`.
+
+### Libros
+
+| Método   | Ruta                           | Descripción                   | Éxito | Errores    |
+|----------|--------------------------------|-------------------------------|-------|------------|
+| `GET`    | `/books`                       | Lista todos los libros        | 200   |            |
+| `GET`    | `/books?category={category_id}`| Filtra libros por categoría   | 200   | 422        |
+| `POST`   | `/books`                       | Crea un libro                 | 201   | 422        |
+| `GET`    | `/books/{id}`                  | Muestra un libro              | 200   | 404        |
+| `PUT`    | `/books/{id}`                  | Actualiza un libro            | 200   | 404, 422   |
+| `DELETE` | `/books/{id}`                  | Elimina un libro              | 200   | 404        |
+
+### Categorías
+
+| Método   | Ruta                | Descripción                                  | Éxito | Errores       |
+|----------|---------------------|----------------------------------------------|-------|---------------|
+| `GET`    | `/categories`       | Lista categorías con cantidad de libros      | 200   |               |
+| `POST`   | `/categories`       | Crea una categoría (nombre único)            | 201   | 422           |
+| `GET`    | `/categories/{id}`  | Muestra una categoría                        | 200   | 404           |
+| `PUT`    | `/categories/{id}`  | Actualiza una categoría                      | 200   | 404, 422      |
+| `DELETE` | `/categories/{id}`  | Elimina una categoría **sin libros**         | 200   | 404, 409      |
+
+### Ejemplos
+
+```bash
+# Listar y filtrar
+curl http://127.0.0.1:8000/books
+curl "http://127.0.0.1:8000/books?category=1"
+
+# Crear
+curl -X POST http://127.0.0.1:8000/books \
+  -H "Content-Type: application/json" -H "Accept: application/json" \
+  -d '{"title":"El Aleph","author":"Jorge Luis Borges","published_year":1949,"category_id":1}'
+
+# Actualizar
+curl -X PUT http://127.0.0.1:8000/books/1 \
+  -H "Content-Type: application/json" -H "Accept: application/json" \
+  -d '{"title":"Cien años de soledad","author":"Gabriel García Márquez","published_year":1967,"category_id":1}'
+
+# Eliminar
+curl -X DELETE http://127.0.0.1:8000/books/1
+```
+
+Respuesta de creación (`201 Created`):
+
+```json
+{
+  "data": {
+    "id": 10,
+    "title": "El Aleph",
+    "author": "Jorge Luis Borges",
+    "description": null,
+    "published_year": 1949,
+    "category_id": 1,
+    "category": { "id": 1, "name": "Novela" },
+    "created_at": "2026-11-24T22:26:50.000000Z",
+    "updated_at": "2026-11-24T22:26:50.000000Z"
+  }
+}
+```
+
+Error de validación (`422 Unprocessable Content`):
+
+```json
+{
+  "message": "Los datos enviados no son válidos.",
+  "errors": {
+    "title": ["El título debe tener al menos 3 caracteres."],
+    "category_id": ["La categoría seleccionada no existe."]
+  }
+}
+```
+
+Recurso inexistente (`404 Not Found`):
+
+```json
+{ "message": "El libro con ID 999 no existe." }
+```
+
+Categoría con libros (`409 Conflict`):
+
+```json
+{ "message": "No se puede eliminar la categoría porque tiene libros asociados.", "books_count": 3 }
+```
+
+## Arquitectura
+
+```
+app/
+├── Http/
+│   ├── Controllers/   BookController, CategoryController
+│   ├── Requests/      StoreBookRequest, UpdateBookRequest, IndexBookRequest,
+│   │                  StoreCategoryRequest, UpdateCategoryRequest
+│   └── Resources/     BookResource, CategoryResource
+└── Models/            Book, Category
+bootstrap/app.php      Registro de rutas API sin prefijo y manejo centralizado de errores JSON
+database/
+├── migrations/        create_categories_table, create_books_table
+├── factories/         BookFactory, CategoryFactory
+└── seeders/           CategorySeeder, BookSeeder
+routes/api.php         Rutas /books y /categories
+tests/Feature/         BookTest, CategoryTest
+```
+
+- **MVC**: los modelos encapsulan relaciones y el scope `ofCategory`. Los controladores coordinan el flujo y los API Resources definen la representación JSON.
+- **Validación**: toda la validación vive en Form Requests, con mensajes en español.
+- **Reglas de negocio**:
+  - `DELETE /books/{id}` comprueba explícitamente que el libro exista antes de eliminarlo (404 si no existe).
+  - `DELETE /categories/{id}` responde 409 si la categoría tiene libros asociados.
+- **Errores HTTP**: `bootstrap/app.php` centraliza las respuestas JSON para 404 (modelo o ruta), 405, 409 (integridad referencial) y 422.
